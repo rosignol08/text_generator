@@ -194,9 +194,11 @@ def generate_alea(markov_chain, ordre, start_token, n_best=1):
     return " ".join(phrase)
 
 
+#corpus.extend(doc_to_word_list("data/Corpus/2999-0.txt"))
+#markov_chain = markov_chain_unigram(corpus)
 corpus = []
 ponctuation = [".", "!", "?", "...", ":", ";", ")", "(", "]", "[", "{", "}", "«", "»", "“", "”", "‘", "’", "'", '"', "—", "-", "–", " ", "\n", "\t", "\r", "\f", "\v"]
-NB_MOTS_MAXI = 1000
+NB_MOTS_MAXI = 500
 
 
 
@@ -216,7 +218,7 @@ def select_files():
     threading.Thread(target=load_files).start()
 def generate_sentence():
     def generate():
-        markov_chaine = markov_chain(corpus, 3)
+        markov_chaine = markov_chain(corpus, 4)
         start_token = start_token_entry.get().strip()
         if not start_token:
             messagebox.showerror("Error", "Please enter a start token.")
@@ -224,7 +226,7 @@ def generate_sentence():
         
         result_text.delete("1.0", tk.END)
         progress_bar['maximum'] = NB_MOTS_MAXI
-        sentence = generate_alea(markov_chaine, 3, start_token, n_best=2)
+        sentence = generate_alea(markov_chaine, 4, start_token, n_best=2)
         result_text.insert(tk.END, sentence)
         progress_bar['value'] = NB_MOTS_MAXI
     threading.Thread(target=generate).start()
