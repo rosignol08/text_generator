@@ -17,7 +17,7 @@ def doc_to_word_list(path):
     with open(path) as input_stream:
         input_stream = io.open(path, mode="r", encoding="utf-8")
         nlp = spacy.load("fr_core_news_sm")
-        nlp.max_length = 1500000
+        nlp.max_length = 15000000
         text = input_stream.read()
         doc = nlp(text)
         sentences = []
@@ -168,14 +168,77 @@ def generate(markov_chain, start_tokens, ordre, n_best=1):
             prevs.append(next_token)
         else:
             break
-
 def generate_alea(markov_chain, ordre, start_token, n_best=1):
+    phrase = []
+    maximum = NB_MOTS_MAXI
+    prevs = [""] * ordre  # Initialiser avec des chaînes vides
+    prevs[-1] = start_token  # Placer le token de départ à la dernière position
+    min_length = 10  # Réduire la longueur minimale pour des tests
+    phrase.append(start_token)
+    
+    while maximum > 0:
+        # Essayer d'abord avec le contexte complet
+        current_state = tuple(prevs)
+        next_token = None
+        
+        # Stratégie de backoff: essayer avec des contextes de plus en plus courts
+        for context_length in range(ordre, 0, -1):
+            shorter_context = tuple(prevs[-context_length:])
+            if shorter_context in markov_chain:
+                next_tokens = sorted(markov_chain[shorter_context].items(), 
+                                    key=lambda item: item[1], reverse=True)[:n_best]
+                if next_tokens:
+                    next_token = random.choice(next_tokens)[0]
+                    # Ne pas accepter de ponctuation de fin si la phrase est trop courte
+                    if next_token in [".", "!", "?"] and len(phrase) < min_length:
+                        # Choisir un autre token si possible
+                        filtered_tokens = [t for t in next_tokens if t[0] not in [".", "!", "?"]]
+                        if filtered_tokens:
+                            next_token = random.choice(filtered_tokens)[0]
+                    break  # Sortir de la boucle de backoff
+        
+        if next_token:
+            # Un token suivant a été trouvé
+            prevs.pop(0)
+            prevs.append(next_token)
+            phrase.append(next_token)
+            maximum -= 1
+            
+            # Si on trouve un signe de ponctuation finale et la phrase est assez longue, arrêter
+            if next_token in [".", "!", "?"] and len(phrase) >= min_length:
+                break
+        else:
+            # Aucun contexte n'a fonctionné, essayons avec juste le dernier mot
+            if phrase[-1] in markov_chain:
+                next_tokens = sorted(markov_chain[phrase[-1]].items(), 
+                                     key=lambda item: item[1], reverse=True)[:n_best]
+                if next_tokens:
+                    next_token = random.choice(next_tokens)[0]
+                    prevs = [""] * (ordre-1) + [next_token]
+                    phrase.append(next_token)
+                    maximum -= 1
+                    continue
+            
+            # Si toutes les tentatives échouent, terminer la phrase
+            if len(phrase) < min_length:
+                # Si la phrase est trop courte, ajouter quelques mots courants
+                common_words = ["est", "a", "de", "le", "la", "les", "un", "une"]
+                for _ in range(min(3, min_length - len(phrase))):
+                    phrase.append(random.choice(common_words))
+            
+            if phrase[-1] not in [".", "!", "?"]:
+                phrase.append(".")
+            break
+    
+    return " ".join(phrase)
+def generate_alea_ancien(markov_chain, ordre, start_token, n_best=1):
     phrase = []
     maximum = NB_MOTS_MAXI
     prevs = corpus[random.randint(0, len(corpus) - 1)][:ordre]  #un vrai début de phrase
     print(start_token, end=" ")
     maximum -= 1
     phrase.append(start_token)
+    min_length = 30
     while maximum > 0:
         current_state = tuple(prevs)
         if current_state in markov_chain:
@@ -183,7 +246,7 @@ def generate_alea(markov_chain, ordre, start_token, n_best=1):
             next_token = random.choice(next_tokens)[0]
             prevs.pop(0)
             prevs.append(next_token)
-            
+           
             if next_token in ponctuation:
                 break
                 
@@ -216,6 +279,7 @@ def select_files():
             progress_bar['value'] = 0
 
     threading.Thread(target=load_files).start()
+'''
 def generate_sentence():
     def generate():
         markov_chaine = markov_chain(corpus, 4)
@@ -231,7 +295,41 @@ def generate_sentence():
         progress_bar['value'] = NB_MOTS_MAXI
     threading.Thread(target=generate).start()
 
-
+'''
+def generate_sentence():
+    def generate():
+        if not corpus:
+            messagebox.showerror("Error", "Please load text files first.")
+            return
+            
+        markov_chaine = markov_chain(corpus, 4)
+        start_token = start_token_entry.get().strip()
+        if not start_token:
+            messagebox.showerror("Error", "Please enter a start token.")
+            return
+        
+        result_text.delete("1.0", tk.END)
+        progress_bar['maximum'] = NB_MOTS_MAXI
+        
+        # Générer la phrase
+        sentence = generate_alea(markov_chaine, 5, start_token, n_best=3)
+        
+        # S'assurer que la phrase se termine correctement
+        if not sentence.rstrip().endswith((".", "!", "?")):
+            # Essayer de trouver une fin cohérente
+            last_words = sentence.split()[-min(4, len(sentence.split())):]
+            for punct in [".", "!", "?"]:
+                if tuple(last_words) + (punct,) in markov_chaine:
+                    sentence += " " + punct
+                    break
+            else:
+                # Si aucune fin n'est trouvée, ajouter simplement un point
+                sentence += "."
+        
+        result_text.insert(tk.END, sentence)
+        progress_bar['value'] = 0  # Réinitialiser la barre de progression
+        
+    threading.Thread(target=generate).start()
 # Create the main window
 root = tk.Tk()
 root.title("Text Generator")
