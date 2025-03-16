@@ -2,6 +2,8 @@ import spacy
 import os
 import io
 import random
+import tkinter as tk
+from tkinter import filedialog, messagebox
 
 def doc_to_word_list(path):
     '''
@@ -56,12 +58,6 @@ def markov_chain_unigram(corpus):
     return probabilify(transitions)
 
 
-corpus = []
-corpus.extend(doc_to_word_list("data/Corpus/2999-0.txt"))
-#markov_chain = markov_chain_unigram(corpus)
-
-ponctuation = [".", "!", "?", "...", ":", ";", ")", "(", "]", "[", "{", "}", "«", "»", "“", "”", "‘", "’", "'", '"', "—", "-", "–", " ", "\n", "\t", "\r", "\f", "\v"]
-NB_MOTS_MAXI = 100
 def generate_unigram(markov_chain, start_token):
     '''
     Paramètres : 
@@ -194,8 +190,43 @@ def generate_alea(markov_chain, ordre, start_token, n_best=1):
             break
 
 
-
-print("\n")
+corpus = []
+#corpus.extend(doc_to_word_list("data/Corpus/2999-0.txt"))
+#markov_chain = markov_chain_unigram(corpus)
 markov_chaine = markov_chain(corpus, 3)
-print("\n")
-generate_alea(markov_chaine, 3, "Si", 2)
+ponctuation = [".", "!", "?", "...", ":", ";", ")", "(", "]", "[", "{", "}", "«", "»", "“", "”", "‘", "’", "'", '"', "—", "-", "–", " ", "\n", "\t", "\r", "\f", "\v"]
+NB_MOTS_MAXI = 100
+
+
+
+def select_files():
+    file_paths = filedialog.askopenfilenames(title="Select Text Files", filetypes=[("Text Files", "*.txt")])
+    if file_paths:
+        corpus.clear()
+        for file_path in file_paths:
+            corpus.extend(doc_to_word_list(file_path))
+        messagebox.showinfo("Success", "Files loaded successfully!")
+def generate_sentence():
+    start_token = start_token_entry.get()
+    if not start_token:
+        messagebox.showerror("Error", "Please enter a start token.")
+        return
+    result_text.delete("1.0", tk.END)
+    result_text.insert(tk.END, start_token + " ")
+    generate_alea(markov_chaine, 3, start_token, 2)
+# Create the main window
+root = tk.Tk()
+root.title("Text Generator")
+# Create and place widgets
+select_button = tk.Button(root, text="Select Text Files", command=select_files)
+select_button.pack(pady=10)
+start_token_label = tk.Label(root, text="Start Token:")
+start_token_label.pack(pady=5)
+start_token_entry = tk.Entry(root)
+start_token_entry.pack(pady=5)
+generate_button = tk.Button(root, text="Generate Sentence", command=generate_sentence)
+generate_button.pack(pady=10)
+result_text = tk.Text(root, height=10, width=50)
+result_text.pack(pady=10)
+# Run the application
+root.mainloop()
