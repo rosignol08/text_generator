@@ -4,6 +4,8 @@ import io
 import random
 import tkinter as tk
 from tkinter import filedialog, messagebox
+from tkinter import ttk
+import threading
 
 def doc_to_word_list(path):
     '''
@@ -168,11 +170,12 @@ def generate(markov_chain, start_tokens, ordre, n_best=1):
             break
 
 def generate_alea(markov_chain, ordre, start_token, n_best=1):
+    phrase = []
     maximum = NB_MOTS_MAXI
     prevs = corpus[random.randint(0, len(corpus) - 1)][:ordre]  #un vrai début de phrase
     print(start_token, end=" ")
     maximum -= 1
-    
+    phrase.append(start_token)
     while maximum > 0:
         current_state = tuple(prevs)
         if current_state in markov_chain:
@@ -184,39 +187,53 @@ def generate_alea(markov_chain, ordre, start_token, n_best=1):
             if next_token in ponctuation:
                 break
                 
-            print(next_token, end=" ")
+            phrase.append(next_token)
             maximum -= 1
         else:
             break
+    return " ".join(phrase)
 
 
 corpus = []
-#corpus.extend(doc_to_word_list("data/Corpus/2999-0.txt"))
-#markov_chain = markov_chain_unigram(corpus)
-markov_chaine = markov_chain(corpus, 3)
 ponctuation = [".", "!", "?", "...", ":", ";", ")", "(", "]", "[", "{", "}", "«", "»", "“", "”", "‘", "’", "'", '"', "—", "-", "–", " ", "\n", "\t", "\r", "\f", "\v"]
-NB_MOTS_MAXI = 100
+NB_MOTS_MAXI = 1000
 
 
 
 def select_files():
-    file_paths = filedialog.askopenfilenames(title="Select Text Files", filetypes=[("Text Files", "*.txt")])
-    if file_paths:
-        corpus.clear()
-        for file_path in file_paths:
-            corpus.extend(doc_to_word_list(file_path))
-        messagebox.showinfo("Success", "Files loaded successfully!")
+    def load_files():
+        file_paths = filedialog.askopenfilenames(title="Select Text Files", filetypes=[("Text Files", "*.txt")])
+        if file_paths:
+            corpus.clear()
+            progress_bar['maximum'] = len(file_paths)
+            for i, file_path in enumerate(file_paths):
+                corpus.extend(doc_to_word_list(file_path))
+                progress_bar['value'] = i + 1
+                root.update_idletasks()
+            messagebox.showinfo("Success", "Files loaded successfully!")
+            progress_bar['value'] = 0
+
+    threading.Thread(target=load_files).start()
 def generate_sentence():
-    start_token = start_token_entry.get()
-    if not start_token:
-        messagebox.showerror("Error", "Please enter a start token.")
-        return
-    result_text.delete("1.0", tk.END)
-    result_text.insert(tk.END, start_token + " ")
-    generate_alea(markov_chaine, 3, start_token, 2)
+    def generate():
+        markov_chaine = markov_chain(corpus, 3)
+        start_token = start_token_entry.get().strip()
+        if not start_token:
+            messagebox.showerror("Error", "Please enter a start token.")
+            return
+        
+        result_text.delete("1.0", tk.END)
+        progress_bar['maximum'] = NB_MOTS_MAXI
+        sentence = generate_alea(markov_chaine, 3, start_token, n_best=2)
+        result_text.insert(tk.END, sentence)
+        progress_bar['value'] = NB_MOTS_MAXI
+    threading.Thread(target=generate).start()
+
+
 # Create the main window
 root = tk.Tk()
 root.title("Text Generator")
+
 # Create and place widgets
 select_button = tk.Button(root, text="Select Text Files", command=select_files)
 select_button.pack(pady=10)
@@ -228,5 +245,8 @@ generate_button = tk.Button(root, text="Generate Sentence", command=generate_sen
 generate_button.pack(pady=10)
 result_text = tk.Text(root, height=10, width=50)
 result_text.pack(pady=10)
+progress_bar = ttk.Progressbar(root, orient="horizontal", length=400, mode="determinate")
+progress_bar.pack(pady=10)
+
 # Run the application
 root.mainloop()
