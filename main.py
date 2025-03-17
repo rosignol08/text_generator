@@ -171,62 +171,84 @@ def generate(markov_chain, start_tokens, ordre, n_best=1):
 def generate_alea(markov_chain, ordre, start_token, n_best=1):
     phrase = []
     maximum = NB_MOTS_MAXI
-    prevs = [""] * ordre  #chaines vides au debut
-    prevs[-1] = start_token  #token de depart derniere pos
-    min_length = 10  #pour pas que ça soit trop court
+    prevs = [""] * ordre
+    prevs[-1] = start_token
+    min_length = 10
     phrase.append(start_token)
     
     while maximum > 0:
-        next_token = None
+        current_state = tuple(prevs)
         
-        #ça c'est du backoff en gros ca essaye avec des contextes de plus en plus courts
-        for context_length in range(ordre, 0, -1):
-            shorter_context = tuple(prevs[-context_length:])
-            if shorter_context in markov_chain:
-                next_tokens = sorted(markov_chain[shorter_context].items(), 
-                                    key=lambda item: item[1], reverse=True)[:n_best]
-                if next_tokens:
-                    next_token = random.choice(next_tokens)[0]
-                    #pour pas accepter de ponctuation de fin si la phrase est trop courte
-                    if next_token in [".", "!", "?"] and len(phrase) < min_length:
-                        #ça choisi un autre token si possible
-                        filtered_tokens = [t for t in next_tokens if t[0] not in [".", "!", "?"]]
-                        if filtered_tokens:
-                            next_token = random.choice(filtered_tokens)[0]
-                    break  #exite de la boucle de backoff
-        
-        if next_token:#ça c'est si on a trouve un autre token
-            prevs.pop(0)
-            prevs.append(next_token)
-            phrase.append(next_token)
-            maximum -= 1
+        # Check if we have this context in our model
+        if current_state in markov_chain:
+            # Instead of just taking n_best tokens, take more possibilities
+            # Get all possible next tokens with their probabilities
+            candidates = list(markov_chain[current_state].items())
             
-            #signe de ponctuation finale et la phrase est pas trop courte arrêter
-            if next_token in [".", "!", "?"] and len(phrase) >= min_length:
+            # If we have enough candidates, sample more broadly
+            if len(candidates) > n_best * 2:
+                # Take a wider selection to increase randomness
+                n_consider = min(len(candidates), n_best * 3)
+                # Randomly select from more options
+                candidates = random.sample(candidates, n_consider)
+            
+            if candidates:
+                # Use weighted random choice based on probabilities
+                total = sum(prob for _, prob in candidates)
+                r = random.random() * total
+                cumulative = 0
+                for token, prob in candidates:
+                    cumulative += prob
+                    if cumulative >= r:
+                        next_token = token
+                        break
+                
+                # Skip ending punctuation if phrase is too short
+                if next_token in [".", "!", "?"] and len(phrase) < min_length:
+                    continue
+                
+                prevs.pop(0)
+                prevs.append(next_token)
+                phrase.append(next_token)
+                maximum -= 1
+                
+                if next_token in [".", "!", "?"] and len(phrase) >= min_length:
+                    break
+            else:
                 break
         else:
-            #si on a pas trouve de token on test avec le token de depart
-            if phrase[-1] in markov_chain:
-                next_tokens = sorted(markov_chain[phrase[-1]].items(),key=lambda item: item[1], reverse=True)[:n_best]
-                if next_tokens:
-                    next_token = random.choice(next_tokens)[0]
-                    prevs = [""] * (ordre-1) + [next_token]
-                    phrase.append(next_token)
-                    maximum -= 1
-                    continue
+            # Try backoff to shorter contexts
+            found = False
+            for backoff in range(ordre-1, 0, -1):
+                shorter_context = tuple(prevs[-backoff:])
+                if shorter_context in markov_chain:
+                    candidates = list(markov_chain[shorter_context].items())
+                    if candidates:
+                        # Introduce more randomness in backoff
+                        next_token = random.choice(candidates)[0]
+                        prevs.pop(0)
+                        prevs.append(next_token)
+                        phrase.append(next_token)
+                        maximum -= 1
+                        found = True
+                        break
             
-            #si ça marche pas on finit la phrase
-            if len(phrase) < min_length:
-                # Si la phrase est trop courte, on ajoute des mots communs
-                #common_words = ["est", "a", "de", "le", "la", "les", "un", "une"]
-                common_words = ["j'ai", "pas","trouver","de","mots","communs"]
-                for i in range (0, len(common_words)):
-                    phrase.append(common_words[i])
-            
-            if phrase[-1] not in [".", "!", "?"]:
-                phrase.append(".")
-            break
-    
+            if not found:
+                # Add some random ending if needed
+                if len(phrase) < min_length:
+                    # Add truly random words from our vocabulary
+                    all_words = list(set(word for state in markov_chain.keys() 
+                                    for word in markov_chain[state].keys() 
+                                    if word not in ponctuation))
+                    if all_words:
+                        for _ in range(min(5, min_length - len(phrase))):
+                            random_word = random.choice(all_words)
+                            phrase.append(random_word)
+                
+                if phrase[-1] not in [".", "!", "?"]:
+                    phrase.append(".")
+                break
+                
     return " ".join(phrase)
 
 corpus = []
