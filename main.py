@@ -168,87 +168,65 @@ def generate(markov_chain, start_tokens, ordre, n_best=1):
             prevs.append(next_token)
         else:
             break
-def generate_alea(markov_chain, ordre, start_token, n_best=1):
+'''modifie cette fonction pour qu'elle construit une phrase en utilisant le mot qui a le plus de probabilité de succeder au token actuel mais rajoute unpeu de random genre choisis le deuxième mot le plus probable ou le troisième et si le mot suivant est le meme que le mot actuel on prend le deuxième le plus probable et on favorise le mot qui a le plus de probabilitée si l y a un écart assez grand entre le premier et le deuxième encore une fois si le mot suivant est pas le meme que le mot actuel'''
+def generate_alea(markov_chain, ordre, start_token, n_best=2):
     phrase = []
     maximum = NB_MOTS_MAXI
-    prevs = [""] * ordre
-    prevs[-1] = start_token
-    min_length = 10
+    prevs = corpus[random.randint(0, len(corpus) - 1)][:ordre]  #un vrai début de phrase
+    print(start_token, end=" ")
+    maximum -= 1
     phrase.append(start_token)
+    MIN_WORDS = 10  # Minimum number of words required
+    prevs = [start_token] * ordre  # initialize with start token   
     
     while maximum > 0:
-        current_state = tuple(prevs)
         
-        # Check if we have this context in our model
+        current_state = tuple(prevs)
         if current_state in markov_chain:
-            # Instead of just taking n_best tokens, take more possibilities
-            # Get all possible next tokens with their probabilities
-            candidates = list(markov_chain[current_state].items())
+            # Get the top n_best tokens by probability
+            next_tokens = sorted(markov_chain[current_state].items(), key=lambda item: item[1], reverse=True)[:n_best+1]
+            # Check if the highest probability next word is the same as the current word
+            if next_tokens and next_tokens[0][0] == prevs[-1] and len(next_tokens) > 1:
+                # Use the second most probable word instead
+                next_token = next_tokens[1][0]
+            else:
+                # Otherwise, choose from the top n_best tokens
+                # If there's a big probability gap between first and second options, favor the first
+                if len(next_tokens) > 1 and next_tokens[0][1] > 2 * next_tokens[1][1]:
+                    next_token = next_tokens[0][0]  # Choose highest probability
+                else:
+                    next_token = random.choice(next_tokens[:n_best])[0]
             
-            # If we have enough candidates, sample more broadly
-            if len(candidates) > n_best * 2:
-                # Take a wider selection to increase randomness
-                n_consider = min(len(candidates), n_best * 3)
-                # Randomly select from more options
-                candidates = random.sample(candidates, n_consider)
+            prevs.pop(0)
+            prevs.append(next_token)
             
-            if candidates:
-                # Use weighted random choice based on probabilities
-                total = sum(prob for _, prob in candidates)
-                r = random.random() * total
-                cumulative = 0
-                for token, prob in candidates:
-                    cumulative += prob
-                    if cumulative >= r:
-                        next_token = token
-                        break
-                
-                # Skip ending punctuation if phrase is too short
-                if next_token in [".", "!", "?"] and len(phrase) < min_length:
-                    continue
-                
-                prevs.pop(0)
-                prevs.append(next_token)
-                phrase.append(next_token)
-                maximum -= 1
-                
-                if next_token in [".", "!", "?"] and len(phrase) >= min_length:
+            if next_token in ponctuation:
+                if len(phrase) < MIN_WORDS:  # If we haven't reached minimum length
+                    # Continue generation by using a random word from a predefined list
+                    
+                    connector_words = ["le", "la", "les", "tu", "il", "elle"]
+                    random_word = random.choice(connector_words)
+                    prevs.pop(0)
+                    prevs.append(random_word.lower())
+                    phrase.append(random_word)
+                else:
+                    phrase.append(next_token)
                     break
             else:
-                break
+                phrase.append(next_token)
+                maximum -= 1
         else:
-            # Try backoff to shorter contexts
-            found = False
-            for backoff in range(ordre-1, 0, -1):
-                shorter_context = tuple(prevs[-backoff:])
-                if shorter_context in markov_chain:
-                    candidates = list(markov_chain[shorter_context].items())
-                    if candidates:
-                        # Introduce more randomness in backoff
-                        next_token = random.choice(candidates)[0]
-                        prevs.pop(0)
-                        prevs.append(next_token)
-                        phrase.append(next_token)
-                        maximum -= 1
-                        found = True
-                        break
-            
-            if not found:
-                # Add some random ending if needed
-                if len(phrase) < min_length:
-                    # Add truly random words from our vocabulary
-                    all_words = list(set(word for state in markov_chain.keys() 
-                                    for word in markov_chain[state].keys() 
-                                    if word not in ponctuation))
-                    if all_words:
-                        for _ in range(min(5, min_length - len(phrase))):
-                            random_word = random.choice(all_words)
-                            phrase.append(random_word)
-                
-                if phrase[-1] not in [".", "!", "?"]:
-                    phrase.append(".")
+            # If we're stuck and haven't reached minimum words
+            if len(phrase) < MIN_WORDS:
+                # Add a random word to continue
+                random_phrase = corpus[random.randint(0, len(corpus) - 1)]
+                if random_phrase:
+                    random_word = random.choice([w for w in random_phrase if w not in ponctuation] or ["et"])
+                    prevs.pop(0)
+                    prevs.append(random_word)
+                    phrase.append(random_word)
+            else:
                 break
-                
     return " ".join(phrase)
 
 corpus = []
@@ -286,7 +264,7 @@ def generate_sentence():
         progress_bar['maximum'] = NB_MOTS_MAXI
         
         #gen la phrases
-        sentence = generate_alea(markov_chaine, 5, start_token, n_best=3)
+        sentence = generate_alea(markov_chaine, 4, start_token, n_best=1)
         
         #verif si la phrase se termine bien
         if not sentence.rstrip().endswith((".", "!", "?")):
